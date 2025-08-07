@@ -1,0 +1,16 @@
+services:
+  moontv-core:
+    image: ghcr.io/lunatechlab/moontv:latest
+    container_name: moontv-core
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      - USERNAME=admin
+      - PASSWORD=admin_password
+      - NEXT_PUBLIC_STORAGE_TYPE=redis
+      - REDIS_URL=redis://default:abc%2E1234@192.168.6.178:6379
+      - NEXT_PUBLIC_ENABLE_REGISTER=true
+    # 挂载自定义配置文件
+    volumes:
+      - ./config.json:/app/config.json:ro
