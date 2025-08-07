@@ -5,6 +5,7 @@ CONTAINER_NAME="moontv"
 IMAGE_NAME="ghcr.io/lunatechlab/moontv:latest"
 LOCAL_PORT=3000
 CONTAINER_PORT=3000
+HOST_APP_DIR="./moontv_app_data"
 
 # 检查是否以root权限运行
 if [ "$EUID" -eq 0 ]; then
@@ -53,6 +54,42 @@ fi
 
 echo
 
+# 创建宿主机挂载目录
+echo "创建宿主机挂载目录: $HOST_APP_DIR"
+mkdir -p "$HOST_APP_DIR"
+
+# 检查宿主机目录是否为空，如果为空则从容器复制文件
+if [ -z "$(ls -A "$HOST_APP_DIR")" ]; then
+    echo "宿主机目录为空，准备从容器复制文件..."
+    
+    # 先临时运行一个容器来复制文件
+    TEMP_CONTAINER="moontv_temp_$(date +%s)"
+    echo "启动临时容器以复制文件..."
+    
+    if docker run -d --name $TEMP_CONTAINER $IMAGE_NAME sleep 10; then
+        # 等待容器启动
+        sleep 2
+        
+        # 复制容器内/app目录到宿主机
+        echo "正在复制容器内文件到宿主机..."
+        if docker cp $TEMP_CONTAINER:/app/. "$HOST_APP_DIR"; then
+            echo "文件复制完成"
+        else
+            echo "警告: 文件复制失败"
+        fi
+        
+        # 停止并删除临时容器
+        docker stop $TEMP_CONTAINER >/dev/null 2>&1
+        docker rm $TEMP_CONTAINER >/dev/null 2>&1
+    else
+        echo "警告: 无法启动临时容器来复制文件"
+    fi
+fi
+
+# 设置目录权限，确保容器可以读写
+echo "设置目录权限..."
+chmod -R 777 "$HOST_APP_DIR"
+
 # 检查容器是否存在
 container_exists=$(docker ps -aq -f name=^${CONTAINER_NAME}$)
 
@@ -74,7 +111,13 @@ if [ ! -z "$container_exists" ]; then
             password="your_password"
         fi
         
-        if ! docker run -d --name $CONTAINER_NAME -p $LOCAL_PORT:$CONTAINER_PORT --env PASSWORD=$password $IMAGE_NAME; then
+        if ! docker run -d \
+            --name $CONTAINER_NAME \
+            -p $LOCAL_PORT:$CONTAINER_PORT \
+            --env PASSWORD=$password \
+            -v "$HOST_APP_DIR":/app \
+            --user $(id -u):$(id -g) \
+            $IMAGE_NAME; then
             echo "错误: 容器创建失败"
             exit 1
         fi
@@ -107,7 +150,13 @@ else
         password="your_password"
     fi
     
-    if ! docker run -d --name $CONTAINER_NAME -p $LOCAL_PORT:$CONTAINER_PORT --env PASSWORD=$password $IMAGE_NAME; then
+    if ! docker run -d \
+        --name $CONTAINER_NAME \
+        -p $LOCAL_PORT:$CONTAINER_PORT \
+        --env PASSWORD=$password \
+        -v "$HOST_APP_DIR":/app \
+        --user $(id -u):$(id -g) \
+        $IMAGE_NAME; then
         echo "错误: 容器创建失败"
         exit 1
     fi
@@ -120,6 +169,7 @@ echo "=== 部署信息 ==="
 echo "容器名称: $CONTAINER_NAME"
 echo "访问地址: http://localhost:$LOCAL_PORT"
 echo "镜像版本: $IMAGE_NAME"
+echo "挂载目录: $HOST_APP_DIR -> /app"
 
 # 显示容器状态
 echo
@@ -128,3 +178,5 @@ docker ps -f name=^${CONTAINER_NAME}$ --format "table {{.Names}}\t{{.Status}}\t{
 
 echo
 echo "部署完成!"
+echo "注意: 如果仍然出现权限问题，请手动运行以下命令:"
+echo "chmod -R 777 $HOST_APP_DIR"
