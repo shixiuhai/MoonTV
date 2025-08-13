@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { CheckCircle, Heart, Link, PlayCircleIcon } from 'lucide-react';
+import { Heart, Link, PlayCircleIcon, Trash2 } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -35,6 +35,7 @@ interface VideoCardProps {
   rate?: string;
   items?: SearchResult[];
   type?: string;
+  isBangumi?: boolean;
 }
 
 export default function VideoCard({
@@ -54,6 +55,7 @@ export default function VideoCard({
   rate,
   items,
   type = '',
+  isBangumi = false,
 }: VideoCardProps) {
   const router = useRouter();
   const [favorited, setFavorited] = useState(false);
@@ -279,7 +281,18 @@ export default function VideoCard({
           fill
           className='object-cover'
           referrerPolicy='no-referrer'
+          loading='lazy'
           onLoadingComplete={() => setIsLoading(true)}
+          onError={(e) => {
+            // 图片加载失败时的重试机制
+            const img = e.target as HTMLImageElement;
+            if (!img.dataset.retried) {
+              img.dataset.retried = 'true';
+              setTimeout(() => {
+                img.src = processImageUrl(actualPoster);
+              }, 2000);
+            }
+          }}
         />
 
         {/* 悬浮遮罩 */}
@@ -300,10 +313,10 @@ export default function VideoCard({
         {(config.showHeart || config.showCheckCircle) && (
           <div className='absolute bottom-3 right-3 flex gap-3 opacity-0 translate-y-2 transition-all duration-300 ease-in-out group-hover:opacity-100 group-hover:translate-y-0'>
             {config.showCheckCircle && (
-              <CheckCircle
+              <Trash2
                 onClick={handleDeleteRecord}
                 size={20}
-                className='text-white transition-all duration-300 ease-out hover:stroke-green-500 hover:scale-[1.1]'
+                className='text-white transition-all duration-300 ease-out hover:stroke-red-500 hover:scale-[1.1]'
               />
             )}
             {config.showHeart && (
@@ -338,7 +351,11 @@ export default function VideoCard({
         {/* 豆瓣链接 */}
         {config.showDoubanLink && actualDoubanId && actualDoubanId !== 0 && (
           <a
-            href={`https://movie.douban.com/subject/${actualDoubanId.toString()}`}
+            href={
+              isBangumi
+                ? `https://bgm.tv/subject/${actualDoubanId.toString()}`
+                : `https://movie.douban.com/subject/${actualDoubanId.toString()}`
+            }
             target='_blank'
             rel='noopener noreferrer'
             onClick={(e) => e.stopPropagation()}
